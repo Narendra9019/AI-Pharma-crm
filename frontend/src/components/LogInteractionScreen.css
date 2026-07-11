@@ -1,0 +1,117 @@
+.log-screen-container {
+  display: grid;
+  grid-template-columns: 2fr 1fr; /* Form takes 2/3 width, Chat takes 1/3 */
+  gap: 20px;
+  align-items: start;
+}
+
+.form-column, .chat-column {
+  background-color: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.chat-column {
+  padding: 0; /* Let the chat components handle their own inner padding */
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 500px;
+}
+
+.form-group {
+  margin-bottom: 15px;
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  font-weight: 500;
+  margin-bottom: 5px;
+  color: #374151;
+  font-size: 14px;
+}
+
+.form-group input, 
+.form-group textarea, 
+.form-group select {
+  padding: 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-family: inherit;
+}
+
+.form-group textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.sentiment-radio-group {
+  display: flex;
+  gap: 15px;
+  margin-top: 5px;
+}
+
+.sentiment-radio-group label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: normal;
+}
+
+.chat-messages {
+  flex-grow: 1;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background-color: #f9fafb;
+}
+
+.message-bubble {
+  padding: 10px 15px;
+  border-radius: 18px;
+  max-width: 85%;
+  font-size: 14px;
+}
+
+.message-bubble.ai {
+  background-color: white;
+  border: 1px solid #e5e7eb;
+  align-self: flex-start;
+}
+
+.message-bubble.user {
+  background-color: #2563EB;
+  color: white;
+  align-self: flex-end;
+}
+
+.chat-input-area {
+  display: flex;
+  padding: 15px;
+  border-top: 1px solid #e5e7eb;
+  background-color: white;
+  border-radius: 0 0 8px 8px;
+}
+
+.chat-input-area input {
+  flex-grow: 1;
+  padding: 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  margin-right: 10px;
+}
+
+.chat-input-area button {
+  padding: 10px 20px;
+  background-color: #6b7280;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
