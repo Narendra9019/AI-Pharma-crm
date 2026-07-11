@@ -1,20 +1,23 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from agent import app_graph
-from fastapi.middleware.cors import CORSMiddleware
-from langchain_core.messages import HumanMessage
-import models
-from database import engine, get_db
 from typing import Optional
 
+import models
+from database import engine, get_db
+from agent import process_chat_message
+
+# This automatically creates your database tables if they don't exist yet
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
+# Add your CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"], # In production, replace with your frontend URL
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -36,15 +39,21 @@ class SaveInteractionRequest(BaseModel):
 
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
-    initial_state = {
-        "messages": [HumanMessage(content=request.message)],
-        "extracted_data": {}
-    }
-    final_state = app_graph.invoke(initial_state)
-    return {
-        "reply": final_state["messages"][-1].content,
-        "form_data": final_state["extracted_data"]
-    }
+    try:
+        # Pass the message directly to our new LangGraph function
+        extracted_data = process_chat_message(request.message)
+        
+        if not extracted_data:
+            raise HTTPException(status_code=422, detail="Failed to extract structural data from the input.")
+            
+        # Return the data to the React frontend
+        return {
+            "status": "success",
+            "reply": "I have successfully extracted the data! Check the form below.",
+            "form_data": extracted_data
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/save")
 async def save_interaction(req: SaveInteractionRequest, db: Session = Depends(get_db)):

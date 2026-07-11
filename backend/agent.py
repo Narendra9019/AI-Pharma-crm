@@ -1,62 +1,21 @@
-from typing import TypedDict, Annotated, List
-from langgraph.graph import StateGraph, END
-from langchain_core.messages import HumanMessage, AIMessage
-from langchain_core.tools import tool
-from langchain_groq import ChatGroq
 import os
-from dotenv import load_dotenv
 import json
-import re 
+from dotenv import load_dotenv
+from groq import Groq
+from typing import TypedDict
+from langgraph.graph import StateGraph, START, END
 
+# Load environment variables
 load_dotenv()
-api_key = os.getenv("GROQ_API_KEY")
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
+# 1. Define the Graph State (The memory of the agent)
 class AgentState(TypedDict):
-    messages: Annotated[List[str], "The conversation history"]
-    extracted_data: dict
+    messages: str
+    extracted_data: str
 
-llm = ChatGroq(model_name="llama-3.3-70b-versatile", temperature=0)
-
-# --- DEFINING THE 5 REQUIRED TOOLS ---
-
-@tool
-def log_interaction_tool(text: str) -> dict:
-    """Tool 1: Parses initial unstructured text into CRM fields (HCP, topics, outcomes)."""
-    return {"action": "log", "fields": ["hcpName", "topicsDiscussed", "outcomes"]}
-
-@tool
-def edit_interaction_tool(text: str) -> dict:
-    """Tool 2: Modifies existing logged data based on corrections."""
-    return {"action": "edit", "fields": ["sentiment", "outcomes"]}
-
-@tool
-def analyze_sentiment_tool(text: str) -> str:
-    """Tool 3: Analyzes text to determine if HCP sentiment is Positive, Neutral, or Negative."""
-    if "good" in text.lower() or "great" in text.lower() or "positive" in text.lower():
-        return "Positive"
-    elif "bad" in text.lower() or "negative" in text.lower():
-        return "Negative"
-    return "Neutral"
-
-@tool
-def generate_followup_tool(topics: str) -> list:
-    """Tool 4: Generates follow-up actions based on topics discussed."""
-    return ["Send product brochure", "Schedule follow-up meeting"]
-
-@tool
-def fetch_hcp_history_tool(hcp_name: str) -> str:
-    """Tool 5: Retrieves past interaction context for an HCP."""
-    return f"Past interactions with {hcp_name} indicate high interest in oncology products."
-
-# Bind tools to the LLM (This fulfills the LangGraph/Tool assignment requirement)
-tools = [log_interaction_tool, edit_interaction_tool, analyze_sentiment_tool, generate_followup_tool, fetch_hcp_history_tool]
-llm_with_tools = llm.bind_tools(tools)
-
-
-def process_chat(state: AgentState):
-    latest_message = state["messages"][-1].content
-    
-    # We use a stricter prompt to force ONLY JSON output
+# 2. Define the extraction node
+def extract_data_node(state: AgentState):
     prompt = f"""
     You are a strict data extraction bot for a Pharma CRM. Extract the following from the user input into a raw JSON object.
     
@@ -65,55 +24,48 @@ def process_chat(state: AgentState):
     - designation (string)
     - date (string, YYYY-MM-DD format if available, otherwise empty)
     - time (string, HH:MM format if available, otherwise empty)
-    - attendees (string, list any other people mentioned like nurses or assistants)
+    - attendees (string)
     - topicsDiscussed (string)
     - sentiment (string, must be 'Positive', 'Neutral', or 'Negative')
     - outcomes (string)
-    - followUpActions (string, explicitly stated follow-ups)
-    - aiSuggestions (array of strings, provide 2 logical next steps based on context)
-    - confidenceScore (integer 0-100 based on how clear the text was)
+    - followUpActions (string)
+    - aiSuggestions (array of strings)
+    - confidenceScore (integer 0-100)
 
-    If a field is missing or cannot be inferred, leave the value as an empty string (or empty array for aiSuggestions).
-    DO NOT include any markdown formatting or code blocks. Output ONLY the raw JSON object.
+    If a field is missing, leave the value as an empty string (or empty array for aiSuggestions).
+    Output ONLY the raw JSON object. Do not include markdown formatting or code blocks.
     
-    User input: {latest_message}
+    User input: {state['messages']}
     """
     
-    sentiment = analyze_sentiment_tool.invoke({"text": latest_message})
-    follow_ups = generate_followup_tool.invoke({"topics": latest_message})
+    # CRITICAL: Using the assignment-mandated gemma2-9b-it model
+    response = client.chat.completions.create(
+        messages=[{"role": "user", "content": prompt}],
+        model="gemma2-9b-it", 
+        temperature=0.1,
+    )
+    
+    return {"extracted_data": response.choices[0].message.content}
+
+# 3. Build and Compile the LangGraph
+builder = StateGraph(AgentState)
+builder.add_node("extract", extract_data_node)
+builder.add_edge(START, "extract")
+builder.add_edge("extract", END)
+graph = builder.compile()
+
+# 4. The main function called by your API endpoint
+def process_chat_message(latest_message: str):
+    # Invoke the LangGraph with the initial state
+    result = graph.invoke({"messages": latest_message, "extracted_data": ""})
+    raw_response = result["extracted_data"]
+    
+    # Clean the JSON string (strip markdown if the model accidentally included it)
+    clean_json = raw_response.replace("```json", "").replace("```", "").strip()
     
     try:
-        raw_response = llm.invoke(prompt)
-        content = raw_response.content.strip()
-        
-        # Strip out markdown code blocks just in case the LLM ignores instructions
-        content = content.replace('```json', '').replace('```', '').strip()
-        
-        # Safely extract just the JSON dictionary using regex
-        json_match = re.search(r'\{.*\}', content, re.DOTALL)
-        if json_match:
-            content = json_match.group(0)
-            
-        extracted = json.loads(content)
-        
-        extracted["sentiment"] = sentiment
-        extracted["aiSuggestions"] = follow_ups
-        
-        state["extracted_data"] = extracted
-        reply = f"I've logged the interaction and detected a {sentiment} sentiment."
-        
-    except Exception as e:
-        # THIS will print the actual reason it failed in your backend terminal!
-        print(f"\n--- AI EXTRACTION ERROR ---\n{str(e)}\nRaw Output: {raw_response.content if 'raw_response' in locals() else 'None'}\n---------------------------\n")
-        
-        state["extracted_data"] = {}
-        reply = "I processed your message but couldn't auto-fill all fields."
-
-    state["messages"].append(AIMessage(content=reply))
-    return state
-
-workflow = StateGraph(AgentState)
-workflow.add_node("agent", process_chat)
-workflow.set_entry_point("agent")
-workflow.add_edge("agent", END)
-app_graph = workflow.compile()
+        parsed_data = json.loads(clean_json)
+        return parsed_data
+    except json.JSONDecodeError:
+        print("Failed to parse JSON:", clean_json)
+        return None

@@ -1,13 +1,11 @@
 from sqlalchemy import create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
-# For assignment simplicity, using SQLite. 
-# To use Postgres, change to: "postgresql://user:password@localhost/dbname"
-SQLALCHEMY_DATABASE_URL = "sqlite:///./crm_app.db"
+# Use the DIRECT_URL you found, replacing [YOUR-PASSWORD] with your actual password
+SQLALCHEMY_DATABASE_URL = "postgresql://postgres.gynltkrradxujufeqdsr:Qwerty!28159019@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres"
 
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
-)
+engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
