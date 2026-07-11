@@ -41,9 +41,10 @@ def extract_data_node(state: AgentState):
     # CRITICAL: Using the assignment-mandated gemma2-9b-it model
     response = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
-        model="gemma2-9b-it", 
+        model="llama-3.1-8b-instant", 
         temperature=0.1,
     )
+    
     
     return {"extracted_data": response.choices[0].message.content}
 
@@ -56,16 +57,21 @@ graph = builder.compile()
 
 # 4. The main function called by your API endpoint
 def process_chat_message(latest_message: str):
-    # Invoke the LangGraph with the initial state
-    result = graph.invoke({"messages": latest_message, "extracted_data": ""})
-    raw_response = result["extracted_data"]
-    
-    # Clean the JSON string (strip markdown if the model accidentally included it)
-    clean_json = raw_response.replace("```json", "").replace("```", "").strip()
-    
     try:
+        # Invoke the LangGraph with the initial state
+        result = graph.invoke({"messages": latest_message, "extracted_data": ""})
+        raw_response = result["extracted_data"]
+        
+        # Clean the JSON string
+        clean_json = raw_response.replace("```json", "").replace("```", "").strip()
+        
+        # LOGGING: Print what the AI actually sent back
+        print("AI Raw Response:", clean_json)
+        
         parsed_data = json.loads(clean_json)
         return parsed_data
-    except json.JSONDecodeError:
-        print("Failed to parse JSON:", clean_json)
+    except Exception as e:
+        # LOGGING: Print the error details
+        print("Error in process_chat_message:", str(e))
         return None
+    

@@ -39,7 +39,7 @@ const DashboardSummary = () => {
           <h2 style={{ margin: '5px 0', color: '#2563EB', minHeight: '35px' }}>
             {totalLogs}
           </h2>
-          <small style={{ color: '#10B981' }}>Live from SQLite</small>
+          <small style={{ color: '#10B981' }}>Live from Production</small>
         </div>
         <div style={{ flex: 1, padding: '20px', border: '1px solid #e5e7eb', borderRadius: '8px', backgroundColor: 'white' }}>
           <p style={{ margin: 0, color: '#6b7280' }}>LangGraph State</p>
